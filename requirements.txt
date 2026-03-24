@@ -1,0 +1,35 @@
+# Core Deep Learning Framework
+torch==2.0.1
+torchvision==0.15.2
+torchaudio==2.0.2
+
+# Data Processing & Scientific Computing
+numpy>=1.23.0,<2.0.0
+pandas>=1.5.0,<2.0.0
+scipy>=1.9.0,<2.0.0
+scikit-learn>=1.2.0,<2.0.0
+
+# Image Processing
+opencv-python>=4.7.0
+Pillow>=9.5.0
+albumentations>=1.3.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tensorboard>=2.11.0
+
+# Utilities
+pyyaml>=6.0
+tqdm>=4.65.0
+python-dotenv>=1.0.0
+
+# Optional: For advanced features
+wandb>=0.14.0  # Weights & Biases integration
+torchsummary>=1.5.1  # Model summary
+
+# Development (optional)
+pytest>=7.2.0
+black>=23.0.0
+flake8>=5.0.0
+isort>=5.12.0

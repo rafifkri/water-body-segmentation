@@ -1,0 +1,64 @@
+# ============================================================================
+# Git Line Ending Configuration
+# Ensures consistent line endings across different operating systems
+# ============================================================================
+
+# Auto detect text files and normalize line endings to LF
+* text=auto
+
+# Source code - always use LF (Unix line endings)
+*.py text eol=lf
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.csv text eol=lf
+
+# Jupyter Notebooks - use LF (JSON format, standard is Unix line endings)
+*.ipynb text eol=lf
+*.ipynb diff=jupyter
+
+# Configuration files
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+Makefile text eol=lf
+
+# Documentation
+*.rst text eol=lf
+*.md text eol=lf
+README* text eol=lf
+LICENSE text eol=lf
+
+# Windows-specific - use CRLF only for Windows batch files
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files - no conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mov binary
+*.mp4 binary
+*.mp3 binary
+*.zip binary
+*.tar binary
+*.rar binary
+*.7z binary
+
+# PyTorch and model files
+*.pt binary
+*.pth binary
+*.ckpt binary
+*.h5 binary
+*.hdf5 binary
+*.pkl binary
+*.pickle binary
+*.joblib binary
+*.safetensors binary
