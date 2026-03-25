@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional, Dict, Tuple, Any
 import logging
 import time
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import numpy as np
 
 from .config import Config
@@ -116,11 +116,14 @@ class Trainer:
         self.model.train()
         
         loss_meter = AverageMeter('Loss')
+        predictions_list = []
+        targets_list = []
         
         progress_bar = tqdm(
             train_loader,
-            desc=f"Epoch {self.current_epoch + 1}/{self.config.training.num_epochs}",
-            total=len(train_loader)
+            desc=f"Epoch {self.current_epoch + 1}/{self.config.training.num_epochs} [TRAIN]",
+            total=len(train_loader),
+            bar_format='{l_bar}{bar:30}{r_bar} {percentage:3.0f}% [{elapsed}<{remaining}]'
         )
         
         for batch_idx, batch in enumerate(progress_bar):
@@ -146,14 +149,31 @@ class Trainer:
             # Update metrics
             loss_meter.update(loss.item(), images.shape[0])
             
-            # Update progress bar
-            progress_bar.set_postfix({
-                'loss': f'{loss_meter.avg:.4f}'
-            })
+            # Collect predictions for metrics calculation
+            predictions_list.append(torch.sigmoid(predictions).detach().cpu())
+            targets_list.append(masks.detach().cpu())
+            
+            # Update progress bar every 5 batches with running metrics
+            if (batch_idx + 1) % 5 == 0 or (batch_idx + 1) == len(train_loader):
+                metrics_dict = {'loss': f'{loss_meter.avg:.4f}'}
+                progress_bar.set_postfix(metrics_dict)
         
-        return {
-            'loss': loss_meter.avg
-        }
+        # Compute full metrics for epoch
+        if predictions_list:
+            predictions_tensor = torch.cat(predictions_list, dim=0)
+            targets_tensor = torch.cat(targets_list, dim=0)
+            
+            epoch_metrics = self.metrics.compute_metrics(
+                predictions_tensor,
+                targets_tensor,
+                threshold=self.config.evaluation.prediction_threshold,
+                metrics_list=self.config.evaluation.metrics
+            )
+            epoch_metrics['loss'] = loss_meter.avg
+        else:
+            epoch_metrics = {'loss': loss_meter.avg}
+        
+        return epoch_metrics
     
     def validate(self, val_loader: DataLoader) -> Dict[str, float]:
 
@@ -163,7 +183,7 @@ class Trainer:
         predictions_list = []
         targets_list = []
         
-        progress_bar = tqdm(val_loader, desc="Validation", total=len(val_loader))
+        progress_bar = tqdm(val_loader, desc="  [VALIDATE]", total=len(val_loader))
         
         with torch.no_grad():
             for batch in progress_bar:
@@ -207,9 +227,9 @@ class Trainer:
         val_loader: DataLoader
     ) -> Dict[str, Any]:
 
-        logger.info("="*60)
-        logger.info("STARTING TRAINING")
-        logger.info("="*60)
+        logger.info("="*80)
+        logger.info("STARTING TRAINING".center(80))
+        logger.info("="*80)
         
         # Prepare for training
         self.prepare_for_training()
@@ -222,9 +242,20 @@ class Trainer:
         for epoch in range(self.config.training.num_epochs):
             self.current_epoch = epoch
             
+            logger.info(f"\n{'='*80}")
+            logger.info(f"Epoch {epoch + 1}/{self.config.training.num_epochs}")
+            logger.info(f"{'='*80}")
+            
             # Train
             train_metrics = self.train_epoch(train_loader)
             self.train_history['loss'].append(train_metrics['loss'])
+            
+            # Log training metrics
+            logger.info(f"\n  📊 TRAINING METRICS:")
+            logger.info(f"    Loss:     {train_metrics['loss']:.4f}")
+            for metric_name, metric_value in sorted(train_metrics.items()):
+                if metric_name != 'loss':
+                    logger.info(f"    {metric_name.upper():10s}: {metric_value:.4f}")
             
             # Validate
             if (epoch + 1) % self.config.training.validate_every == 0:
@@ -232,13 +263,12 @@ class Trainer:
                 self.val_history['loss'].append(val_metrics['loss'])
                 self.val_history['metrics'].append(val_metrics)
                 
-                # Log metrics
-                logger.info(f"\nEpoch {epoch + 1}/{self.config.training.num_epochs}")
-                logger.info(f"  Train Loss: {train_metrics['loss']:.4f}")
-                logger.info(f"  Val Loss: {val_metrics['loss']:.4f}")
-                for metric_name, metric_value in val_metrics.items():
+                # Log validation metrics
+                logger.info(f"\n  📊 VALIDATION METRICS:")
+                logger.info(f"    Loss:     {val_metrics['loss']:.4f}")
+                for metric_name, metric_value in sorted(val_metrics.items()):
                     if metric_name != 'loss':
-                        logger.info(f"  Val {metric_name.upper()}: {metric_value:.4f}")
+                        logger.info(f"    {metric_name.upper():10s}: {metric_value:.4f}")
                 
                 # Save checkpoint
                 if self.config.checkpoint.save_checkpoints:
@@ -252,6 +282,7 @@ class Trainer:
                             val_metrics,
                             checkpoint_path
                         )
+                        logger.info(f"  ✅ Checkpoint saved: {checkpoint_path.name}")
                 
                 # Early stopping
                 if self.config.training.enable_early_stopping:
@@ -276,11 +307,13 @@ class Trainer:
                                 val_metrics,
                                 best_path
                             )
+                            logger.info(f"  ⭐ Best model saved! {monitor_metric}: {current_value:.4f}")
                         else:
                             patience_counter += 1
+                            logger.info(f"  ⚠️  No improvement. Patience: {patience_counter}/{self.config.training.early_stopping_patience}")
                             
                             if patience_counter >= self.config.training.early_stopping_patience:
-                                logger.info(f"Early stopping triggered after {epoch + 1} epochs")
+                                logger.info(f"\n  🛑 Early stopping triggered after {epoch + 1} epochs")
                                 break
             
             # Update scheduler
@@ -289,11 +322,13 @@ class Trainer:
         
         elapsed_time = time.time() - start_time
         
-        logger.info("="*60)
-        logger.info("TRAINING COMPLETED")
-        logger.info("="*60)
-        logger.info(f"Total time: {elapsed_time / 3600:.2f} hours")
-        logger.info(f"Best metrics: {self.best_metrics}")
+        logger.info("\n" + "="*80)
+        logger.info("TRAINING COMPLETED".center(80))
+        logger.info("="*80)
+        logger.info(f"Total time: {elapsed_time / 3600:.2f} hours ({elapsed_time / 60:.1f} minutes)")
+        if self.best_metrics:
+            logger.info(f"Best metrics: {self.best_metrics}")
+        logger.info("="*80 + "\n")
         
         return {
             'train_history': self.train_history,
